@@ -401,9 +401,9 @@ F1::
     ; Y축 스크롤바를 위아래로 살짝 움직인 뒤 맨 위에 놓는다 (이후 한 칸씩 스크롤되도록 보정)
     ; 웹 스크롤바가 드래그를 인식하도록 느린 속도로 실행
     SetDefaultMouseSpeed(15)
-    MouseClickDrag("Left", 1690, 503, 1690, 694)   ; 아래로
+    MouseClickDrag("Left", 1690, 503, 1690, 780)   ; 아래로
     Sleep(300)
-    MouseClickDrag("Left", 1690, 694, 1690, 400)   ; 위로 초과 드래그하여 맨 위에 고정
+    MouseClickDrag("Left", 1690, 780, 1690, 400)   ; 위로 초과 드래그하여 맨 위에 고정
     Sleep(300)
     SetDefaultMouseSpeed(2)
     ;MsgBox(DataCount)
