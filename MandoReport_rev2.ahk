@@ -11,7 +11,7 @@ if (A_Now > ExpireDate)
 CFG_PartNoX := 460       ; 품번 셀 좌표 (헤더 보임 상태)
 CFG_PartNoY := 380
 CFG_ItemX := 394         ; 검사항목 컬럼 x좌표 (그리드)
-CFG_DetailX := 445       ; 세부내역 컬럼 x좌표 (그리드)
+CFG_DetailX := 442       ; 세부내역 컬럼 x좌표 (그리드)
 CFG_SeqX := 317          ; 순번 컬럼 x좌표 (그리드) - 행 중복처리 방지용
 CFG_TemplatePath := A_ScriptDir . "\Master.xlsx"   ; 엑셀 양식 파일
 CFG_SaveFolder := A_ScriptDir . "\CMM_Result"      ; 결과 저장 폴더
