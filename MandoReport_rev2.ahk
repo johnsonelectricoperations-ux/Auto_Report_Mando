@@ -267,12 +267,13 @@ SafeCopy_1(x, y, clicks := 3, maxRetries := 3, timeout := 1, returnZeroIfNotNumb
     }
 }
 
-; CMM 행 스캔: 검사항목/세부내역을 읽고, Tab 기준점(계측기 셀)을 복원한다
-; 반환값: Characteristic 문자열 (예: "내경_경2")
+; CMM 행 스캔: 순번/검사항목/세부내역을 읽고, Tab 기준점(계측기 셀)을 복원한다
+; 반환값: Characteristic 문자열 (예: "180_대칭도", "100_Width_거리")
 ScanCMMInfo(rowY)
 {
-    global CFG_ItemX, CFG_DetailX
+    global CFG_SeqX, CFG_ItemX, CFG_DetailX
 
+    Seq := Trim(SafeCopy(CFG_SeqX, rowY))
     ItemName := Trim(SafeCopy(CFG_ItemX, rowY))
     Detail := Trim(SafeCopy(CFG_DetailX, rowY))
 
@@ -281,11 +282,16 @@ ScanCMMInfo(rowY)
     Sleep(50)
 
     if (ItemName != "" && Detail != "" && ItemName != Detail)
-        return ItemName . "_" . Detail
+        name := ItemName . "_" . Detail
     else if (Detail != "")
-        return Detail
+        name := Detail
     else
-        return ItemName
+        name := ItemName
+
+    if (Seq != "")
+        name := Seq . "_" . name
+
+    return name
 }
 
 ; 작업 종료 처리: CMM 수집분이 있으면 엑셀 저장 후 완료 메시지 표시
@@ -392,9 +398,10 @@ F1::
     y := 387
     y1 := 767
     Count := 0
-    MouseClickDrag("Left", 1690, 503, 1690, 694)
+    ; Y축 스크롤바를 위아래로 살짝 움직인 뒤 맨 위에 놓는다 (이후 한 칸씩 스크롤되도록 보정)
+    MouseClickDrag("Left", 1690, 503, 1690, 694)   ; 아래로
     Sleep(50)
-    MouseClickDrag("Left", 1690, 694, 1690, 500)
+    MouseClickDrag("Left", 1690, 694, 1690, 400)   ; 위로 초과 드래그하여 맨 위에 고정
     Sleep(50)
     ;MsgBox(DataCount)
 
