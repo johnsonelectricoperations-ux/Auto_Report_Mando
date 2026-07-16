@@ -12,6 +12,7 @@ CFG_PartNoX := 460       ; 품번 셀 좌표 (헤더 보임 상태)
 CFG_PartNoY := 380
 CFG_ItemX := 394         ; 검사항목 컬럼 x좌표 (그리드)
 CFG_DetailX := 445       ; 세부내역 컬럼 x좌표 (그리드)
+CFG_SeqX := 317          ; 순번 컬럼 x좌표 (그리드) - 행 중복처리 방지용
 CFG_TemplatePath := A_ScriptDir . "\Master.xlsx"   ; 엑셀 양식 파일
 CFG_SaveFolder := A_ScriptDir . "\CMM_Result"      ; 결과 저장 폴더
 ; ===================================================================
@@ -287,6 +288,25 @@ ScanCMMInfo(rowY)
         return ItemName
 }
 
+; 작업 종료 처리: CMM 수집분이 있으면 엑셀 저장 후 완료 메시지 표시
+FinishReport(prefix)
+{
+    global CMM_Records, PartNo
+
+    msg := prefix
+    if (CMM_Records.Length > 0)
+    {
+        try {
+            savedFile := SaveCMMToExcel(PartNo, CMM_Records)
+            msg .= "`n`nCMM 측정값 " . CMM_Records.Length . "건을 저장했습니다:`n" . savedFile
+        }
+        catch as e {
+            msg .= "`n`n단, CMM 엑셀 저장에 실패했습니다:`n" . e.Message
+        }
+    }
+    MsgBox(msg)
+}
+
 ; 수집된 CMM 측정값을 Master.xlsx 양식에 기록하여 저장
 ; 반환값: 저장된 파일 전체 경로
 SaveCMMToExcel(partNo, records)
@@ -385,21 +405,7 @@ F1::
 
         if (Count = DataCount)
         {
-            ; CMM 항목이 있으면 엑셀로 저장
-            if (CMM_Records.Length > 0)
-            {
-                try {
-                    savedFile := SaveCMMToExcel(PartNo, CMM_Records)
-                    MsgBox("완료하였습니다.`n`nCMM 측정값 " . CMM_Records.Length . "건을 저장했습니다:`n" . savedFile)
-                }
-                catch as e {
-                    MsgBox("완료하였습니다.`n`n단, CMM 엑셀 저장에 실패했습니다:`n" . e.Message)
-                }
-            }
-            else
-            {
-                MsgBox("완료하였습니다.")
-            }
+            FinishReport("완료하였습니다.")
             return
         }
         else if (Count <= 15)
@@ -501,11 +507,35 @@ F1::
         }
         else if (Count > 15)
         {
-            SetDefaultMouseSpeed(15)
-            MouseClickDrag("Left", 1680, 550, 1680, 560) ; Y축 스크롤바
-            Sleep(300)
-            SetDefaultMouseSpeed(2)
-            Sleep(50)
+            ; 첫 진입 시 y1 위치(=마지막으로 처리한 15번째 행)의 순번을 기준값으로 저장
+            if (Count = 16)
+                LastSeq := Trim(SafeCopy(CFG_SeqX, y1))
+
+            ; 순번이 바뀔 때까지 스크롤 (같은 행 중복 처리 방지)
+            scrollTry := 0
+            Seq := ""
+            Loop
+            {
+                SetDefaultMouseSpeed(15)
+                MouseClickDrag("Left", 1680, 550, 1680, 560) ; Y축 스크롤바
+                Sleep(300)
+                SetDefaultMouseSpeed(2)
+                Sleep(50)
+                Seq := Trim(SafeCopy(CFG_SeqX, y1))
+
+                if (Seq != "" && Seq != LastSeq)
+                    break  ; 새로운 행 확인됨
+
+                scrollTry++
+                if (scrollTry >= 3)
+                {
+                    ; 3회 스크롤해도 순번이 그대로면 그리드 끝에 도달한 것으로 판단
+                    FinishReport("더 이상 새로운 행이 없어 종료합니다.`n(처리 " . (Count - 1) . "건 / 건수 " . Data . "건)")
+                    return
+                }
+            }
+            LastSeq := Seq
+
             DataValue := SafeCopy(x1, y1)
             ;MsgBox(DataValue)
 
