@@ -387,7 +387,7 @@ SaveProfileToExcel(partNo, inspLot, records)
             }
         }
 
-        fileName := saveDir . "\" . FormatTime(A_Now, "yyyyMMdd") . "_" . safePartNo . "_" . FormatTime(A_Now, "HHmmss") . ".xlsx"
+        fileName := saveDir . "\" . FormatTime(A_Now, "yyyyMMdd") . "_" . safePartNo . "_Profile_" . FormatTime(A_Now, "HHmmss") . ".xlsx"
         wb.SaveAs(fileName, 51)  ; 51 = xlsx
         wb.Close(false)
         return fileName
@@ -444,7 +444,7 @@ SaveCMMToExcel(partNo, records)
             row++
         }
 
-        fileName := saveDir . "\" . FormatTime(A_Now, "yyyyMMdd") . "_" . safePartNo . "_" . FormatTime(A_Now, "HHmmss") . ".xlsx"
+        fileName := saveDir . "\" . FormatTime(A_Now, "yyyyMMdd") . "_" . safePartNo . "_CMM_" . FormatTime(A_Now, "HHmmss") . ".xlsx"
         wb.SaveAs(fileName, 51)  ; 51 = xlsx
         wb.Close(false)
         return fileName
