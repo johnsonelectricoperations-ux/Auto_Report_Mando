@@ -15,11 +15,18 @@ CFG_DetailX := 437       ; 세부내역 컬럼 x좌표 (그리드)
 CFG_SeqX := 305          ; 순번 컬럼 x좌표 (그리드) - 행 중복처리 방지용
 CFG_TemplatePath := A_ScriptDir . "\Master.xlsx"   ; 엑셀 양식 파일
 CFG_SaveFolder := A_ScriptDir . "\CMM_Result"      ; 결과 저장 폴더
+; =================== 형상측정기(Profile) 저장 설정 ===================
+CFG_LotX := 460          ; 검사로트 셀 좌표 (헤더 보임 상태) ★F3으로 확인 필요
+CFG_LotY := 300
+CFG_ProfileTemplatePath := A_ScriptDir . "\Profile_Master.xlsx"  ; 형상측정 양식 파일
+CFG_ProfileSaveFolder := A_ScriptDir . "\Profile_Result"         ; 형상측정 결과 저장 폴더
 ; ===================================================================
 
-; CMM 수집 데이터 (F1 실행마다 초기화)
+; CMM/형상측정 수집 데이터 (F1 실행마다 초기화)
 CMM_Records := []
+Profile_Records := []
 PartNo := ""
+InspLot := ""
 
 F2::ExitApp()
 
@@ -38,6 +45,14 @@ IsCMM(Equipment)
     if (!Equipment)
         return false
     return (InStr(Equipment, "삼차원") || InStr(Equipment, "CMM") || SubStr(Equipment, 1, 2) = "삼차")
+}
+
+; 계측기가 형상측정기 계열인지 판별
+IsProfile(Equipment)
+{
+    if (!Equipment)
+        return false
+    return (SubStr(Equipment, 1, 2) = "형상")
 }
 
 Ave(Lower, Target, Upper, Equipment) ; 랜덤값 계산식
@@ -294,10 +309,10 @@ ScanCMMInfo(rowY)
     return name
 }
 
-; 작업 종료 처리: CMM 수집분이 있으면 엑셀 저장 후 완료 메시지 표시
+; 작업 종료 처리: CMM/형상측정 수집분이 있으면 엑셀 저장 후 완료 메시지 표시
 FinishReport(prefix)
 {
-    global CMM_Records, PartNo
+    global CMM_Records, Profile_Records, PartNo, InspLot
 
     msg := prefix
     if (CMM_Records.Length > 0)
@@ -310,7 +325,74 @@ FinishReport(prefix)
             msg .= "`n`n단, CMM 엑셀 저장에 실패했습니다:`n" . e.Message
         }
     }
+    if (Profile_Records.Length > 0)
+    {
+        try {
+            savedFile := SaveProfileToExcel(PartNo, InspLot, Profile_Records)
+            msg .= "`n`n형상측정값 " . Profile_Records.Length . "건을 저장했습니다:`n" . savedFile
+        }
+        catch as e {
+            msg .= "`n`n단, 형상측정 엑셀 저장에 실패했습니다:`n" . e.Message
+        }
+    }
     MsgBox(msg)
+}
+
+; 수집된 형상측정값을 Profile_Master.xlsx(KEYENCE 양식)에 기록하여 저장
+; 반환값: 저장된 파일 전체 경로
+SaveProfileToExcel(partNo, inspLot, records)
+{
+    global CFG_ProfileTemplatePath, CFG_ProfileSaveFolder
+
+    if (!FileExist(CFG_ProfileTemplatePath))
+        throw Error("형상측정 양식 파일을 찾을 수 없습니다:`n" . CFG_ProfileTemplatePath)
+
+    if (!DirExist(CFG_ProfileSaveFolder))
+        DirCreate(CFG_ProfileSaveFolder)
+
+    ; 파일명에 쓸 수 없는 문자 제거
+    safePartNo := RegExReplace(partNo, '[\\/:*?"<>|\r\n]', "")
+    if (safePartNo = "")
+        safePartNo := "NONAME"
+
+    xl := ComObject("Excel.Application")
+    xl.Visible := false
+    xl.DisplayAlerts := false
+
+    try {
+        wb := xl.Workbooks.Open(CFG_ProfileTemplatePath, , true)  ; 읽기전용으로 열어 양식 보호
+        ws := wb.Sheets(1)
+
+        ; 헤더 채우기
+        ws.Range("I16").Value := FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss")  ; 측정 일시
+        ws.Range("I17").Value := inspLot                                   ; 로트 번호 (검사로트)
+        ws.Range("I22").Value := partNo                                    ; 도번 (품번)
+        ws.Range("I25").Value := "OK"                                      ; 종합 판정 결과
+
+        ; 32행부터 측정값 1개당 1행씩 기록
+        row := 32
+        no := 1
+        for rec in records {
+            for v in rec.values {
+                ws.Cells(row, 2).Value := no             ; B: No. (양식 기본 8행 초과 대비)
+                ws.Cells(row, 8).Value := "OK"           ; H: 판정
+                ws.Cells(row, 9).Value := v              ; I: 계측 결과
+                ws.Cells(row, 11).Value := rec.target    ; K: 설계값
+                ws.Cells(row, 12).Value := rec.upper     ; L: 공차 상한값
+                ws.Cells(row, 13).Value := rec.lower     ; M: 공차 하한값
+                row++
+                no++
+            }
+        }
+
+        fileName := CFG_ProfileSaveFolder . "\" . safePartNo . "_" . FormatTime(A_Now, "yyyyMMdd_HHmmss") . ".xlsx"
+        wb.SaveAs(fileName, 51)  ; 51 = xlsx
+        wb.Close(false)
+        return fileName
+    }
+    finally {
+        xl.Quit()
+    }
 }
 
 ; 수집된 CMM 측정값을 Master.xlsx 양식에 기록하여 저장
@@ -372,13 +454,15 @@ SaveCMMToExcel(partNo, records)
 
 F1::
 {
-    global CMM_Records, PartNo, CFG_PartNoX, CFG_PartNoY
+    global CMM_Records, Profile_Records, PartNo, InspLot, CFG_PartNoX, CFG_PartNoY, CFG_LotX, CFG_LotY
 
-    ; ===== 품번 확인 (헤더가 보이는 상태에서 F1을 누른다) =====
+    ; ===== 품번/검사로트 확인 (헤더가 보이는 상태에서 F1을 누른다) =====
     CMM_Records := []
+    Profile_Records := []
     PartNo := Trim(SafeCopy(CFG_PartNoX, CFG_PartNoY))
+    InspLot := Trim(SafeCopy(CFG_LotX, CFG_LotY))
 
-    answer := MsgBox("품번: [" . PartNo . "]`n`n'숨김' 버튼을 눌러 목록 화면으로 전환한 뒤 [확인]을 누르세요.", "품번 확인", "OKCancel")
+    answer := MsgBox("품번: [" . PartNo . "]`n검사로트: [" . InspLot . "]`n`n'숨김' 버튼을 눌러 목록 화면으로 전환한 뒤 [확인]을 누르세요.", "품번/검사로트 확인", "OKCancel")
     if (answer = "Cancel")
         return
 
@@ -451,6 +535,10 @@ F1::
                     CharName := ScanCMMInfo(y)
                     cmmValues := []
                 }
+                ; 형상측정기면 측정값 수집 준비
+                isProfRow := IsProfile(Equipment)
+                if (isProfRow)
+                    profValues := []
 
                 Sleep(50)
                 Send("{Tab}")
@@ -464,6 +552,8 @@ F1::
                     Send(result)
                     if (isCMMRow)
                         cmmValues.Push(result)
+                    if (isProfRow)
+                        profValues.Push(result)
                     Sleep(100)
                     Send("{Tab}")
                 }
@@ -476,6 +566,16 @@ F1::
                     try fTarget := Float(Target)
                     try fUpper := Float(Upper)
                     CMM_Records.Push({name: CharName, lower: fLower, target: fTarget, upper: fUpper, values: cmmValues})
+                }
+
+                ; 형상측정 항목이면 수집 목록에 추가
+                if (isProfRow && profValues.Length > 0)
+                {
+                    fLower := 0, fTarget := 0, fUpper := 0
+                    try fLower := Float(Lower)
+                    try fTarget := Float(Target)
+                    try fUpper := Float(Upper)
+                    Profile_Records.Push({lower: fLower, target: fTarget, upper: fUpper, values: profValues})
                 }
 
                 ; 정량이고 샘플수가 5일 때만 좌우 스크롤
@@ -577,6 +677,10 @@ F1::
                     CharName := ScanCMMInfo(y1)
                     cmmValues := []
                 }
+                ; 형상측정기면 측정값 수집 준비
+                isProfRow := IsProfile(Equipment)
+                if (isProfRow)
+                    profValues := []
 
                 Sleep(50)
                 Send("{Tab}")
@@ -590,6 +694,8 @@ F1::
                     Send(result)
                     if (isCMMRow)
                         cmmValues.Push(result)
+                    if (isProfRow)
+                        profValues.Push(result)
                     Sleep(100)
                     Send("{Tab}")
                 }
@@ -602,6 +708,16 @@ F1::
                     try fTarget := Float(Target)
                     try fUpper := Float(Upper)
                     CMM_Records.Push({name: CharName, lower: fLower, target: fTarget, upper: fUpper, values: cmmValues})
+                }
+
+                ; 형상측정 항목이면 수집 목록에 추가
+                if (isProfRow && profValues.Length > 0)
+                {
+                    fLower := 0, fTarget := 0, fUpper := 0
+                    try fLower := Float(Lower)
+                    try fTarget := Float(Target)
+                    try fUpper := Float(Upper)
+                    Profile_Records.Push({lower: fLower, target: fTarget, upper: fUpper, values: profValues})
                 }
 
                 ; 정량이고 샘플수가 5일 때만 좌우 스크롤
