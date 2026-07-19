@@ -347,13 +347,15 @@ SaveProfileToExcel(partNo, inspLot, records)
     if (!FileExist(CFG_ProfileTemplatePath))
         throw Error("형상측정 양식 파일을 찾을 수 없습니다:`n" . CFG_ProfileTemplatePath)
 
-    if (!DirExist(CFG_ProfileSaveFolder))
-        DirCreate(CFG_ProfileSaveFolder)
-
     ; 파일명에 쓸 수 없는 문자 제거
     safePartNo := RegExReplace(partNo, '[\\/:*?"<>|\r\n]', "")
     if (safePartNo = "")
         safePartNo := "NONAME"
+
+    ; 저장 경로: 기본폴더\년도\월\품번\
+    saveDir := CFG_ProfileSaveFolder . "\" . FormatTime(A_Now, "yyyy") . "\" . FormatTime(A_Now, "MM") . "\" . safePartNo
+    if (!DirExist(saveDir))
+        DirCreate(saveDir)
 
     xl := ComObject("Excel.Application")
     xl.Visible := false
@@ -385,7 +387,7 @@ SaveProfileToExcel(partNo, inspLot, records)
             }
         }
 
-        fileName := CFG_ProfileSaveFolder . "\" . safePartNo . "_" . FormatTime(A_Now, "yyyyMMdd_HHmmss") . ".xlsx"
+        fileName := saveDir . "\" . safePartNo . "_" . FormatTime(A_Now, "yyyyMMdd_HHmmss") . ".xlsx"
         wb.SaveAs(fileName, 51)  ; 51 = xlsx
         wb.Close(false)
         return fileName
@@ -404,13 +406,15 @@ SaveCMMToExcel(partNo, records)
     if (!FileExist(CFG_TemplatePath))
         throw Error("엑셀 양식 파일을 찾을 수 없습니다:`n" . CFG_TemplatePath)
 
-    if (!DirExist(CFG_SaveFolder))
-        DirCreate(CFG_SaveFolder)
-
     ; 파일명에 쓸 수 없는 문자 제거
     safePartNo := RegExReplace(partNo, '[\\/:*?"<>|\r\n]', "")
     if (safePartNo = "")
         safePartNo := "NONAME"
+
+    ; 저장 경로: 기본폴더\년도\월\품번\
+    saveDir := CFG_SaveFolder . "\" . FormatTime(A_Now, "yyyy") . "\" . FormatTime(A_Now, "MM") . "\" . safePartNo
+    if (!DirExist(saveDir))
+        DirCreate(saveDir)
 
     xl := ComObject("Excel.Application")
     xl.Visible := false
@@ -440,7 +444,7 @@ SaveCMMToExcel(partNo, records)
             row++
         }
 
-        fileName := CFG_SaveFolder . "\" . safePartNo . "_" . FormatTime(A_Now, "yyyyMMdd_HHmmss") . ".xlsx"
+        fileName := saveDir . "\" . safePartNo . "_" . FormatTime(A_Now, "yyyyMMdd_HHmmss") . ".xlsx"
         wb.SaveAs(fileName, 51)  ; 51 = xlsx
         wb.Close(false)
         return fileName
