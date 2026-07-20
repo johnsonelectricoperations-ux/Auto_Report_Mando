@@ -287,7 +287,7 @@ SafeCopy_1(x, y, clicks := 3, maxRetries := 3, timeout := 1, returnZeroIfNotNumb
 
 ; 로트번호 복사 함수
 ; '-'가 포함된 로트번호(예: 6G17-1)는 더블클릭만으로 전체가 선택되지 않으므로
-; 더블클릭 → 0.5초 대기 → 한 번 더 클릭하여 전체 선택 후 복사한다
+; 필드 클릭 후 Ctrl+A로 전체 선택하여 복사한다
 SafeCopyDrag(x, y, dragW := 80, maxRetries := 3, timeout := 2) {
     retryCount := 0
 
@@ -297,11 +297,11 @@ SafeCopyDrag(x, y, dragW := 80, maxRetries := 3, timeout := 2) {
         ; 클립보드 초기화
         A_Clipboard := ""
 
-        ; 더블클릭 → 0.8초 대기 → 추가 클릭 → 0.3초 대기 후 복사 (전체 선택)
-        Click(x, y, 2)
-        Sleep(800)
+        ; 필드 클릭 → Ctrl+A 전체 선택 → 복사
         Click(x, y)
         Sleep(300)
+        Send("^a")
+        Sleep(200)
         Send("^c")
 
         ; 클립보드에 데이터가 들어올 때까지 대기
