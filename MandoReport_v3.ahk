@@ -16,8 +16,10 @@ CFG_SeqX := 305          ; 순번 컬럼 x좌표 (그리드) - 행 중복처리 
 CFG_TemplatePath := A_ScriptDir . "\Master.xlsx"   ; 엑셀 양식 파일
 CFG_SaveFolder := A_ScriptDir . "\CMM_Result"      ; 결과 저장 폴더
 ; =================== 형상측정기(Profile) 저장 설정 ===================
-CFG_LotX := 460          ; 검사로트 셀 좌표 (헤더 보임 상태) ★F3으로 확인 필요
-CFG_LotY := 300
+CFG_LotX := 1380         ; 로트번호 셀 좌표 (헤더 보임 상태)
+CFG_LotY := 400
+CFG_PlantX := 895        ; SubPlant 셀 좌표 (헤더 보임 상태) - 공급업체 판별용
+CFG_PlantY := 340
 CFG_ProfileTemplatePath := A_ScriptDir . "\Profile_Master.xlsx"  ; 형상측정 양식 파일
 CFG_ProfileSaveFolder := A_ScriptDir . "\Profile_Result"         ; 형상측정 결과 저장 폴더
 ; ===================================================================
@@ -27,6 +29,7 @@ CMM_Records := []
 Profile_Records := []
 PartNo := ""
 InspLot := ""
+PlantName := ""
 
 F2::ExitApp()
 
@@ -282,6 +285,44 @@ SafeCopy_1(x, y, clicks := 3, maxRetries := 3, timeout := 1, returnZeroIfNotNumb
     }
 }
 
+; 더블클릭 후 오른쪽으로 드래그하여 복사하는 함수
+; '-'가 포함된 로트번호(예: 6G17-1)는 더블클릭만으로 전체가 선택되지 않으므로
+; 더블클릭 상태에서 오른쪽으로 드래그해 끝까지 선택한 뒤 복사한다
+SafeCopyDrag(x, y, dragW := 80, maxRetries := 3, timeout := 2) {
+    retryCount := 0
+
+    Loop {
+        retryCount++
+
+        ; 클립보드 초기화
+        A_Clipboard := ""
+
+        ; 더블클릭 후 드래그 (첫 클릭 → 두번째 클릭은 누른 채 이동)
+        Click(x, y)
+        Sleep(30)
+        Click(x, y, "Down")
+        MouseMove(x + dragW, y, 10)
+        Sleep(30)
+        Click(x + dragW, y, "Up")
+        Sleep(50)
+        Send("^c")
+
+        ; 클립보드에 데이터가 들어올 때까지 대기
+        if (ClipWait(timeout)) {
+            if (Trim(A_Clipboard) != "") {
+                return A_Clipboard
+            }
+        }
+
+        if (retryCount >= maxRetries) {
+            MsgBox("클립보드 복사 실패 - 좌표(" . x . ", " . y . ")에서 " . maxRetries . "번 시도 후 실패")
+            return ""
+        }
+
+        Sleep(100)
+    }
+}
+
 ; CMM 행 스캔: 순번/검사항목/세부내역을 읽고, Tab 기준점(계측기 셀)을 복원한다
 ; 반환값: Characteristic 문자열 (예: "180_대칭도", "100_Width_거리")
 ScanCMMInfo(rowY)
@@ -342,7 +383,7 @@ FinishReport(prefix)
 ; 반환값: 저장된 파일 전체 경로
 SaveProfileToExcel(partNo, inspLot, records)
 {
-    global CFG_ProfileTemplatePath, CFG_ProfileSaveFolder
+    global CFG_ProfileTemplatePath, CFG_ProfileSaveFolder, PlantName
 
     if (!FileExist(CFG_ProfileTemplatePath))
         throw Error("형상측정 양식 파일을 찾을 수 없습니다:`n" . CFG_ProfileTemplatePath)
@@ -352,8 +393,8 @@ SaveProfileToExcel(partNo, inspLot, records)
     if (safePartNo = "")
         safePartNo := "NONAME"
 
-    ; 저장 경로: 기본폴더\년도\월\품번\
-    saveDir := CFG_ProfileSaveFolder . "\" . FormatTime(A_Now, "yyyy") . "\" . FormatTime(A_Now, "MM") . "\" . safePartNo
+    ; 저장 경로: 기본폴더\공급업체\년도\월\품번\
+    saveDir := CFG_ProfileSaveFolder . "\" . PlantName . "\" . FormatTime(A_Now, "yyyy") . "\" . FormatTime(A_Now, "MM") . "\" . safePartNo
     if (!DirExist(saveDir))
         DirCreate(saveDir)
 
@@ -401,7 +442,7 @@ SaveProfileToExcel(partNo, inspLot, records)
 ; 반환값: 저장된 파일 전체 경로
 SaveCMMToExcel(partNo, records)
 {
-    global CFG_TemplatePath, CFG_SaveFolder
+    global CFG_TemplatePath, CFG_SaveFolder, PlantName
 
     if (!FileExist(CFG_TemplatePath))
         throw Error("엑셀 양식 파일을 찾을 수 없습니다:`n" . CFG_TemplatePath)
@@ -411,8 +452,8 @@ SaveCMMToExcel(partNo, records)
     if (safePartNo = "")
         safePartNo := "NONAME"
 
-    ; 저장 경로: 기본폴더\년도\월\품번\
-    saveDir := CFG_SaveFolder . "\" . FormatTime(A_Now, "yyyy") . "\" . FormatTime(A_Now, "MM") . "\" . safePartNo
+    ; 저장 경로: 기본폴더\공급업체\년도\월\품번\
+    saveDir := CFG_SaveFolder . "\" . PlantName . "\" . FormatTime(A_Now, "yyyy") . "\" . FormatTime(A_Now, "MM") . "\" . safePartNo
     if (!DirExist(saveDir))
         DirCreate(saveDir)
 
@@ -458,15 +499,24 @@ SaveCMMToExcel(partNo, records)
 
 F1::
 {
-    global CMM_Records, Profile_Records, PartNo, InspLot, CFG_PartNoX, CFG_PartNoY, CFG_LotX, CFG_LotY
+    global CMM_Records, Profile_Records, PartNo, InspLot, PlantName, CFG_PartNoX, CFG_PartNoY, CFG_LotX, CFG_LotY, CFG_PlantX, CFG_PlantY
 
-    ; ===== 품번/검사로트 확인 (헤더가 보이는 상태에서 F1을 누른다) =====
+    ; ===== 품번/로트번호/공급업체 확인 (헤더가 보이는 상태에서 F1을 누른다) =====
     CMM_Records := []
     Profile_Records := []
     PartNo := Trim(SafeCopy(CFG_PartNoX, CFG_PartNoY))
-    InspLot := Trim(SafeCopy(CFG_LotX, CFG_LotY))
+    InspLot := Trim(SafeCopyDrag(CFG_LotX, CFG_LotY))  ; '-' 포함 로트번호 대응 (더블클릭+드래그)
 
-    answer := MsgBox("품번: [" . PartNo . "]`n검사로트: [" . InspLot . "]`n`n'숨김' 버튼을 눌러 목록 화면으로 전환한 뒤 [확인]을 누르세요.", "품번/검사로트 확인", "OKCancel")
+    ; SubPlant 코드로 공급업체 판별
+    plantCode := SafeCopy(CFG_PlantX, CFG_PlantY)
+    if (InStr(plantCode, "10211"))
+        PlantName := "만도원주"
+    else if (InStr(plantCode, "10311"))
+        PlantName := "만도익산"
+    else
+        PlantName := "미확인"
+
+    answer := MsgBox("품번: [" . PartNo . "]`n로트번호: [" . InspLot . "]`n공급업체: [" . PlantName . "]`n`n'숨김' 버튼을 눌러 목록 화면으로 전환한 뒤 [확인]을 누르세요.", "검사정보 확인", "OKCancel")
     if (answer = "Cancel")
         return
 
