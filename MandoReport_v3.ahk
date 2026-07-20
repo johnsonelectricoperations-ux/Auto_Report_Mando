@@ -414,15 +414,25 @@ SaveProfileToExcel(partNo, inspLot, records)
 
         ; 32행부터 측정값 1개당 1행씩 기록
         row := 32
-        no := 1
+        no := 1        ; 전체 행 연속 순번 (B열, E열 공용)
+        itemNo := 0    ; 형상측정 항목 번호 (요소1/요소2용)
         for rec in records {
+            itemNo++
+            sampleNo := 0  ; 항목 내 샘플 번호 (코멘트 X1~)
             for v in rec.values {
-                ws.Cells(row, 2).Value := no             ; B: No. (양식 기본 8행 초과 대비)
-                ws.Cells(row, 8).Value := "OK"           ; H: 판정
-                ws.Cells(row, 9).Value := v              ; I: 계측 결과
-                ws.Cells(row, 11).Value := rec.target    ; K: 설계값
-                ws.Cells(row, 12).Value := rec.upper     ; L: 공차 상한값
-                ws.Cells(row, 13).Value := rec.lower     ; M: 공차 하한값
+                sampleNo++
+                ws.Cells(row, 2).Value := no                          ; B: No.
+                ws.Cells(row, 3).Value := "프로파일 계측"              ; C: 계측명
+                ws.Cells(row, 4).Value := "수직선" . itemNo            ; D: 요소1
+                ws.Cells(row, 5).Value := no                          ; E: 연속 순번
+                ws.Cells(row, 6).Value := "점-점(수평)" . itemNo       ; F: 요소2
+                ws.Cells(row, 7).Value := "X" . sampleNo              ; G: 코멘트
+                ws.Cells(row, 8).Value := "OK"                        ; H: 판정
+                ws.Cells(row, 9).Value := v                           ; I: 계측 결과
+                ws.Cells(row, 10).Value := "mm"                       ; J: 단위
+                ws.Cells(row, 11).Value := rec.target                 ; K: 설계값
+                ws.Cells(row, 12).Value := rec.upper                  ; L: 공차 상한값
+                ws.Cells(row, 13).Value := rec.lower                  ; M: 공차 하한값
                 row++
                 no++
             }
