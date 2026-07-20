@@ -297,11 +297,11 @@ SafeCopyDrag(x, y, dragW := 80, maxRetries := 3, timeout := 2) {
         ; 클립보드 초기화
         A_Clipboard := ""
 
-        ; 더블클릭 → 0.5초 대기 → 추가 클릭 (전체 선택)
+        ; 더블클릭 → 0.8초 대기 → 추가 클릭 → 0.3초 대기 후 복사 (전체 선택)
         Click(x, y, 2)
-        Sleep(500)
+        Sleep(800)
         Click(x, y)
-        Sleep(50)
+        Sleep(300)
         Send("^c")
 
         ; 클립보드에 데이터가 들어올 때까지 대기
