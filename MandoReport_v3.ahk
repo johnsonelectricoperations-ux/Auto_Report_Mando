@@ -285,9 +285,9 @@ SafeCopy_1(x, y, clicks := 3, maxRetries := 3, timeout := 1, returnZeroIfNotNumb
     }
 }
 
-; 더블클릭 후 오른쪽으로 드래그하여 복사하는 함수
+; 로트번호 복사 함수
 ; '-'가 포함된 로트번호(예: 6G17-1)는 더블클릭만으로 전체가 선택되지 않으므로
-; 더블클릭 상태에서 오른쪽으로 드래그해 끝까지 선택한 뒤 복사한다
+; 더블클릭 → 0.5초 대기 → 한 번 더 클릭하여 전체 선택 후 복사한다
 SafeCopyDrag(x, y, dragW := 80, maxRetries := 3, timeout := 2) {
     retryCount := 0
 
@@ -297,13 +297,10 @@ SafeCopyDrag(x, y, dragW := 80, maxRetries := 3, timeout := 2) {
         ; 클립보드 초기화
         A_Clipboard := ""
 
-        ; 더블클릭 후 드래그 (첫 클릭 → 두번째 클릭은 누른 채 이동)
+        ; 더블클릭 → 0.5초 대기 → 추가 클릭 (전체 선택)
+        Click(x, y, 2)
+        Sleep(500)
         Click(x, y)
-        Sleep(30)
-        Click(x, y, "Down")
-        MouseMove(x + dragW, y, 10)
-        Sleep(30)
-        Click(x + dragW, y, "Up")
         Sleep(50)
         Send("^c")
 
