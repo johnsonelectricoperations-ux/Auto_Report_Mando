@@ -58,8 +58,10 @@ IsProfile(Equipment)
     return (SubStr(Equipment, 1, 2) = "형상")
 }
 
-Ave(Lower, Target, Upper, Equipment) ; 랜덤값 계산식
+Ave(Lower, Target, Upper, Equipment, Detail := "") ; 랜덤값 계산식
 {
+    global PartNo
+
     ; 원본 문자열 값 보존 (0.0과 0 구분을 위해)
     OriginalUpper := Upper
 
@@ -81,9 +83,28 @@ Ave(Lower, Target, Upper, Equipment) ; 랜덤값 계산식
         prefix := SubStr(Equipment, 1, 2)
     }
 
+    useNormal := false  ; true면 아래 Rlower/Rupper 대신 정규분포로 g를 생성
+
     ; 새로운 룰 적용 (우선순위대로)
+    ; 0-1. 만도익산 SL462001 시리즈 밀도 특례 (계측기: 비중)
+    if (prefix = "비중" && InStr(PartNo, "SL462001")) {
+        Rlower := 6.55
+        Rupper := 6.58
+        ;MsgBox("0-1번(SL462001 밀도)입니다")
+    }
+    ; 0-2. CMM 계측 + GD&T 항목(진원도/위치도/흔들림/동심도/원통도/직각도/평면도/대칭도/평행도/윤곽도/진직도/동축도)
+    ;      SPEC(Upper) 절반 이내로, 3시그마 정규분포로 생성
+    else if (IsCMM(Equipment) && IsHalfSpecItem(Detail)) {
+        specHalf := Upper / 2
+        Rlower := Lower
+        Rupper := specHalf
+        NormMean := (Lower + specHalf) / 2
+        NormSigma := (specHalf - Lower) / 6
+        useNormal := true
+        ;MsgBox("0-2번(GD&T SPEC 절반)입니다")
+    }
     ; 1. upper값이 정확히 "0.0"이고 equipment가 로크일 때
-    if (OriginalUpper = "0.0" && prefix = "로크") {
+    else if (OriginalUpper = "0.0" && prefix = "로크") {
         Rlower := 78
         Rupper := 82
         ;MsgBox("1번입니다")
@@ -151,7 +172,9 @@ Ave(Lower, Target, Upper, Equipment) ; 랜덤값 계산식
     }
 
     ; 랜덤 값 생성
-    if (Rlower >= Rupper) {
+    if (useNormal) {
+        g := RandomNormal(NormMean, NormSigma, Rlower, Rupper)
+    } else if (Rlower >= Rupper) {
         ; Rlower가 Rupper보다 크거나 같으면 Target 값 반환
         g := Target
     } else {
@@ -321,7 +344,7 @@ SafeCopyDrag(x, y, dragW := 80, maxRetries := 3, timeout := 2) {
 }
 
 ; CMM 행 스캔: 순번/검사항목/세부내역을 읽고, Tab 기준점(계측기 셀)을 복원한다
-; 반환값: Characteristic 문자열 (예: "180_대칭도", "100_Width_거리")
+; 반환값: {name: Characteristic 문자열(예: "180_대칭도"), detail: 세부내역 원본 문자열}
 ScanCMMInfo(rowY)
 {
     global CFG_SeqX, CFG_ItemX, CFG_DetailX
@@ -344,7 +367,33 @@ ScanCMMInfo(rowY)
     if (Seq != "")
         name := Seq . "_" . name
 
-    return name
+    return {name: name, detail: Detail}
+}
+
+; 3시그마 정규분포 난수 생성 (Box-Muller 변환), [minVal, maxVal]로 클램핑
+RandomNormal(mean, sigma, minVal, maxVal)
+{
+    u1 := Random(0.0000001, 1.0)
+    u2 := Random(0.0000001, 1.0)
+    z := Sqrt(-2 * Ln(u1)) * Cos(2 * 3.14159265358979 * u2)
+    val := mean + z * sigma
+
+    if (val < minVal)
+        val := minVal
+    else if (val > maxVal)
+        val := maxVal
+    return val
+}
+
+; 측정기기가 CMM일 때 SPEC 절반 적용 대상 세부내역(GD&T 항목) 판별
+IsHalfSpecItem(Detail)
+{
+    static Items := ["진원도", "위치도", "흔들림", "동심도", "원통도", "직각도"
+                    , "평면도", "대칭도", "평행도", "윤곽도", "진직도", "동축도"]
+    for term in Items
+        if (Detail = term)
+            return true
+    return false
 }
 
 ; 작업 종료 처리: CMM/형상측정 수집분이 있으면 엑셀 저장 후 완료 메시지 표시
@@ -591,9 +640,12 @@ F1::
 
                 ; CMM이면 검사항목/세부내역 추가 스캔 (기준점은 함수 내에서 복원)
                 isCMMRow := IsCMM(Equipment)
+                DetailName := ""
                 if (isCMMRow)
                 {
-                    CharName := ScanCMMInfo(y)
+                    cmmInfo := ScanCMMInfo(y)
+                    CharName := cmmInfo.name
+                    DetailName := cmmInfo.detail
                     cmmValues := []
                 }
                 ; 형상측정기면 측정값 수집 준비
@@ -609,7 +661,7 @@ F1::
                 Loop c
                 {
                     Sleep(100)
-                    result := Ave(Lower, Target, Upper, Equipment)
+                    result := Ave(Lower, Target, Upper, Equipment, DetailName)
                     Send(result)
                     if (isCMMRow)
                         cmmValues.Push(result)
@@ -733,9 +785,12 @@ F1::
 
                 ; CMM이면 검사항목/세부내역 추가 스캔 (기준점은 함수 내에서 복원)
                 isCMMRow := IsCMM(Equipment)
+                DetailName := ""
                 if (isCMMRow)
                 {
-                    CharName := ScanCMMInfo(y1)
+                    cmmInfo := ScanCMMInfo(y1)
+                    CharName := cmmInfo.name
+                    DetailName := cmmInfo.detail
                     cmmValues := []
                 }
                 ; 형상측정기면 측정값 수집 준비
@@ -751,7 +806,7 @@ F1::
                 Loop c
                 {
                     Sleep(100)
-                    result := Ave(Lower, Target, Upper, Equipment)
+                    result := Ave(Lower, Target, Upper, Equipment, DetailName)
                     Send(result)
                     if (isCMMRow)
                         cmmValues.Push(result)
